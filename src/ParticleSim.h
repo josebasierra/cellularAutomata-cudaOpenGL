@@ -24,11 +24,13 @@ public:
     void draw(glm::mat4& modelview, glm::mat4& projection);
 
 private:
+    void initParticles();
     void createVBO();
     void deleteVBO();
     
 private:
-    Particle particles[NUM_PARTICLES];
+    Particle h_particles[NUM_PARTICLES];
+    Particle* d_particles;
     
     GLuint vao,vbo;
     struct cudaGraphicsResource *cuda_vbo_resource;

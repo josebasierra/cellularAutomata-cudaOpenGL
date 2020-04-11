@@ -1,16 +1,24 @@
 #ifndef PARTICLE_H_
 #define PARTICLE_H_
 
-struct Particle {
-    float x, y;        
-//     float speed;
-//     float type;
-    //... float s0, t0;         // Texcoord0
+
+struct vec2 {
+    float x, y;
+};
+
+
+struct VertexParticle {
+    vec2 position;
+    //float r, g, b;
     
-    Particle(){
-        x = 0;
-        y = 0;
-    }
+};
+
+
+struct Particle {
+    vec2 position;        
+    vec2 speed;
+    //float type;
+    //float mass....    
 }; 
 
 #endif

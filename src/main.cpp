@@ -74,7 +74,7 @@ void drawCallback(){
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
     glm::mat4 modelview = glm::mat4(1.0f);
-    glm::mat4 projection = glm::ortho(0.0f, float(SCREEN_WIDTH), float(SCREEN_HEIGHT), 0.0f);
+    glm::mat4 projection = glm::ortho(0.0f, float(SCREEN_WIDTH), 0.0f , float(SCREEN_HEIGHT));
     
     particleSim.draw(modelview, projection);
 

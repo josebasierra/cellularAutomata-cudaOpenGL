@@ -18,30 +18,32 @@ ParticleSim::~ParticleSim() {
 
 
 void ParticleSim::init(){
-    
-    //init particle positions
-    for (int i = 0; i < NUM_PARTICLES; i++){
-        particles[i].x = rand()%1300;
-        particles[i].y = rand()%800;
-    }
-    
     shaderProgram.loadShaders("src/shaders/simple.vert", "src/shaders/simple.frag");
+    initParticles();
     createVBO();
 }
 
 
 void ParticleSim::update(int deltaTime) {
+    
+    run_simulation(d_particles, NUM_PARTICLES, deltaTime);
+
+    
+    // update of VBO inside CUDA ------------------------------------------------------------
+    
     // map vbo to be used by CUDA
-    Particle *dptr;
+    VertexParticle *dptr;
     cudaGraphicsMapResources(1, &cuda_vbo_resource, 0);
     size_t num_bytes;
     cudaGraphicsResourceGetMappedPointer((void **)&dptr, &num_bytes,cuda_vbo_resource);
     
-    // CUDA LOGIC...
-    run_kernel(dptr, NUM_PARTICLES, deltaTime);
+    // run kernel to update vertices of the VBO
+    run_updateVertices(dptr, d_particles, NUM_PARTICLES);
     
     // unmap vbo
     cudaGraphicsUnmapResources(1, &cuda_vbo_resource, 0);
+    
+    // --------------------------------------------------------------------------------------
 }
 
 
@@ -67,6 +69,19 @@ void ParticleSim::draw(glm::mat4& modelview, glm::mat4& projection) {
 }
 
 
+void ParticleSim::initParticles() {
+    
+    //init some random particle positions
+    for (int i = 0; i < NUM_PARTICLES; i++) 
+        h_particles[i].position = {float(rand()%1300), float(rand()%800)};
+
+    
+    //allocate particles in gpu
+    cudaMalloc((void**)&d_particles, NUM_PARTICLES*sizeof(Particle)); 
+    cudaMemcpy(d_particles, h_particles, NUM_PARTICLES*sizeof(Particle), cudaMemcpyHostToDevice);
+}
+
+
 void ParticleSim::createVBO() {
     
     // create VAO and VBO
@@ -75,8 +90,8 @@ void ParticleSim::createVBO() {
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
-    glBufferData(GL_ARRAY_BUFFER, NUM_PARTICLES*sizeof(Particle), &particles, GL_DYNAMIC_DRAW);
-    posLocation = shaderProgram.bindVertexAttribute("position", 2, sizeof(Particle), 0);
+    glBufferData(GL_ARRAY_BUFFER, NUM_PARTICLES*sizeof(VertexParticle), 0, GL_DYNAMIC_DRAW);
+    posLocation = shaderProgram.bindVertexAttribute("position", 2, sizeof(VertexParticle), 0);
     
     // unbind
     glBindVertexArray(0);
