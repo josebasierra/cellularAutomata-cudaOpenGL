@@ -6,9 +6,16 @@ struct vec2 {
     float x, y;
 };
 
+struct rgba{
+    unsigned char r;
+    unsigned char g;
+    unsigned char b;
+    unsigned char a;
+};
 
-struct VertexParticle {
+struct Vertex {
     vec2 position;
+    vec2 texCoord;
     //float r, g, b;
     
 };

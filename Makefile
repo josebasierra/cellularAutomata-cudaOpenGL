@@ -9,7 +9,7 @@ INCLUDES	= -I./src -I./src/utils
 LIBRARY_FLAGS	= -lglut -lGL -lGLEW
 
 
-OBJECTS = main.o ParticleSim.o kernel.o Shader.o ShaderProgram.o 
+OBJECTS = main.o CellularAutomata.o kernel.o Shader.o ShaderProgram.o 
 
 
 default: program.exe

@@ -9,36 +9,39 @@
 #include <iostream>
 using namespace std;
 
+const int SIZE = 100;
+const rgba DEATH_COLOR = {50, 50, 50, 255};
+const rgba LIFE_COLOR = {255, 255, 255, 255};
 
-#define NUM_PARTICLES 100000
-#define PARTICLE_SIZE 2
-    
-
-class ParticleSim {
+class CellularAutomata {
     
 public:
-    ~ParticleSim();
+    ~CellularAutomata();
     
     void init();
-    void update(int deltaTime);
+    void update();
     void draw(glm::mat4& modelview, glm::mat4& projection);
 
 private:
-    void initParticles();
-    void createVBO();
+    void initState();
+    void initVBO();
+    void initTexture();
+    
+    void updateTexture();
+    
     void deleteVBO();
+    void deleteTexture();
     
 private:
-    Particle h_particles[NUM_PARTICLES];
-    Particle* d_particles;
+    bool state[SIZE*SIZE];
+    uint simulation_step;
     
     GLuint vao,vbo;
     struct cudaGraphicsResource *cuda_vbo_resource;
 
-    GLint posLocation;
+    GLint posLocation, texLocation;
+    GLuint texture;
     ShaderProgram shaderProgram;
-    
-    
 }; 
 
 #endif // _PARTICLE_SIM_INCLUDE 

@@ -1,4 +1,4 @@
-#include "ParticleSim.h"
+#include "CellularAutomata.h"
 #include <GL/freeglut.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -6,10 +6,11 @@
 
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
+#define TIME_BETWEEN_SIMULATION_STEPS 200
+CellularAutomata cellularAutomata;
 
-ParticleSim particleSim;
-
-int elapsedtTime = 0;
+int elapsedTime = 0;
+int timeSinceLastStep = 0;
 float frames = 0;
 float timeFrames = 0;
 
@@ -35,7 +36,7 @@ int main(int argc, char **argv)
 
     // needed to use 'gl' calls
     glewInit();
-    particleSim.init();
+    cellularAutomata.init();
     
     glutMainLoop();
     
@@ -76,7 +77,7 @@ void drawCallback(){
     glm::mat4 modelview = glm::mat4(1.0f);
     glm::mat4 projection = glm::ortho(0.0f, float(SCREEN_WIDTH), 0.0f , float(SCREEN_HEIGHT));
     
-    particleSim.draw(modelview, projection);
+    cellularAutomata.draw(modelview, projection);
 
     glutSwapBuffers();
 }
@@ -86,15 +87,21 @@ void idleCallback(){
 
     // time shit...
     int newElapsedTime = glutGet(GLUT_ELAPSED_TIME);
-	int deltaTime = newElapsedTime - elapsedtTime;
-    elapsedtTime = newElapsedTime;
+	int deltaTime = newElapsedTime - elapsedTime;
+    elapsedTime = newElapsedTime;
     
     updateAvgFps(deltaTime);
     
     // update logic...
-    particleSim.update(deltaTime);
+    if (elapsedTime - timeSinceLastStep >= TIME_BETWEEN_SIMULATION_STEPS){
+            timeSinceLastStep = elapsedTime;
+            cellularAutomata.update();
+    }
+
     
     glutPostRedisplay();
 }
+
+
 
 
