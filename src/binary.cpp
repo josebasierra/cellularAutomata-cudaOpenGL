@@ -15,14 +15,15 @@ int main(int argc, char **argv)
     
     int binary[9]; //in a 2D image, the neighbourhood has 9 cells
 
-    for(int i = 0; rule > 0; i++)    
+    for(int i = 0; i < 9; i++)    
     {    
         binary[i] = rule%2;    
-        rule /= 2;  
+        rule = rule/2;  
+        cout << i << " " << binary[i] << " " << rule << endl;
     }    
     
     cout<<"Binary of the given number = ";    
-    for(int i = 9; i >= 0; i--)    
+    for(int i = 8; i >= 0; i--)    
     {    
         cout << binary[i];    
     }    
