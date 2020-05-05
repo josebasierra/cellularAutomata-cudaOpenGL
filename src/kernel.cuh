@@ -1,10 +1,10 @@
 #ifndef KERNEL_H_
 #define KERNEL_H_
 
-#include "Particle.h"
+#include "structDefs.h"
 
 
-void run_simulation(Particle* particles, int N, int deltaTime);
-void run_updateVertices(Vertex* vertices, Particle* particles, int N); 
+void cuda_updateCellularState(bool* input, bool* output, int SIZE);
+//void run_update_texture(bool* output, direccionTexturaGPU...); 
 
 #endif

@@ -1,7 +1,7 @@
 #ifndef _PARTICLE_SIM_INCLUDE
 #define _PARTICLE_SIM_INCLUDE
 
-#include "Particle.h"
+#include "structDefs.h"
 #include "ShaderProgram.h"
 #include <glm/glm.hpp>
 #include <cuda_gl_interop.h>
@@ -9,7 +9,7 @@
 #include <iostream>
 using namespace std;
 
-const int SIZE = 100;
+const int SIZE = 128;
 const rgba DEATH_COLOR = {50, 50, 50, 255};
 const rgba LIFE_COLOR = {255, 255, 255, 255};
 
@@ -24,16 +24,18 @@ public:
 
 private:
     void initState();
-    void initVBO();
+    void initQuadGeometry();
     void initTexture();
     
+    void updateCellularState(bool* input, bool* output);
     void updateTexture();
     
-    void deleteVBO();
-    void deleteTexture();
+    void freeQuadGeometry();
+    void freeTexture();
     
 private:
-    bool state[SIZE*SIZE];
+    bool *h_input, *h_output;
+    bool *d_input, *d_output;
     uint simulation_step;
     
     GLuint vao,vbo;

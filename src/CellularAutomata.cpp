@@ -13,14 +13,31 @@ using namespace std;
 
 
 CellularAutomata::~CellularAutomata() {
-    deleteVBO();
+    
+    free((void*)h_input);
+    free((void*)h_output);
+    cudaFree((void*)d_input);
+    cudaFree((void*)d_output);
+    
+    freeQuadGeometry();
+    freeTexture();
 }
 
 
 void CellularAutomata::init(){
     shaderProgram.loadShaders("src/shaders/texture.vert", "src/shaders/texture.frag");
-    initVBO();
+    initQuadGeometry();
     initTexture();
+    
+    int numBytes = SIZE*SIZE*sizeof(bool);
+    
+    //host memory
+    h_input = (bool*) malloc(numBytes);
+    h_output = (bool*) malloc(numBytes);
+    
+    //device memory
+    cudaMalloc((void**)&d_input, numBytes); 
+    cudaMalloc((void**)&d_output, numBytes); 
     
     initState();
     simulation_step = 0;
@@ -28,16 +45,35 @@ void CellularAutomata::init(){
 
 //TODO: Adapt cuda code for CellularAutomata
 void CellularAutomata::update() {
-
-    // ejemplo version cpu (faltaria otro state, input output)
-    for (int i = 0; i < SIZE*SIZE; i++)
+    string mode = "CUDA";
+    
+    if (mode == "CUDA") 
     {
-        if (simulation_step % 2 && i%2){
-            state[i] = !state[i];
+        // change input/output
+        if (simulation_step % 2) {
+            bool* aux = d_input;
+            d_input = d_output;
+            d_output = aux;
         }
+        cuda_updateCellularState(d_input, d_output, SIZE);
+        
+        //get data from gpu to cpu to update texture
+        cudaMemcpy(h_output, d_output, SIZE*SIZE*sizeof(bool), cudaMemcpyDeviceToHost); 
+    }
+    else if (mode == "CPU")
+    {
+        if (simulation_step % 2) {
+            bool* aux = h_input;
+            h_input = h_output;
+            h_output = aux;
+        }
+        updateCellularState(h_input, h_output);
+    }
+    else
+    {
+        cout << "fuck off" << endl;
     }
     simulation_step++;
-    updateTexture();
     
     // update of VBO inside CUDA ------------------------------------------------------------
     
@@ -59,6 +95,8 @@ void CellularAutomata::update() {
 
 void CellularAutomata::draw(glm::mat4& modelview, glm::mat4& projection) {
     
+    updateTexture();
+    
     // activate program and pass uniforms to shaders
     shaderProgram.use();
 	shaderProgram.setUniformMatrix4f("modelview", modelview);
@@ -67,7 +105,6 @@ void CellularAutomata::draw(glm::mat4& modelview, glm::mat4& projection) {
     
     // bind
     glEnable(GL_TEXTURE_2D);
-    
 	glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     
@@ -78,29 +115,39 @@ void CellularAutomata::draw(glm::mat4& modelview, glm::mat4& projection) {
     // unbind
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-    
     glDisable(GL_TEXTURE_2D);
 }
 
+// PRIVATE METHODS -----------------------------------------------------------------------
 
 void CellularAutomata::initState(){
     for (int i = 0; i < SIZE*SIZE; i++){
-        state[i] = false;
+        h_input[i] = (rand() % 100) < 50;
+    }
+      cudaMemcpy(d_input, h_input, SIZE*SIZE*sizeof(bool), cudaMemcpyHostToDevice);
+}
+
+
+void CellularAutomata::updateCellularState(bool* input, bool* output){
+    for (int i = 0; i < SIZE*SIZE; i++)
+    {
+        output[i] = !input[i];
     }
 }
 
 
 void CellularAutomata::updateTexture(){
     rgba texture_data[SIZE*SIZE];
+    
     for (int i = 0; i < SIZE*SIZE; i++){
-        texture_data[i] = state[i] ? LIFE_COLOR : DEATH_COLOR;
+        texture_data[i] = h_output[i] ? LIFE_COLOR : DEATH_COLOR;
     }
     
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SIZE, SIZE, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
 }
 
 
-void CellularAutomata::initVBO() {
+void CellularAutomata::initQuadGeometry() {
     
     // create VAO and VBO
     glGenVertexArrays(1, &vao);
@@ -108,6 +155,7 @@ void CellularAutomata::initVBO() {
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
+    //TODO: change hardcoded positions
     //define quad vertices to display texture 
     Vertex v_left_up, v_left_down, v_right_up, v_right_down;
     v_left_up.position = {100,700};
@@ -158,7 +206,7 @@ void CellularAutomata::initTexture(){
 }
 
 
-void CellularAutomata::deleteVBO(){
+void CellularAutomata::freeQuadGeometry(){
     // remove CUDA register of the VBO
     //cudaGraphicsUnregisterResource(cuda_vbo_resource);
     
@@ -166,4 +214,9 @@ void CellularAutomata::deleteVBO(){
     glBindBuffer(1, vbo);
     glDeleteBuffers(1, &vbo);
     vbo = 0;
+}
+
+
+void CellularAutomata::freeTexture(){
+    //free texture memory...
 }
