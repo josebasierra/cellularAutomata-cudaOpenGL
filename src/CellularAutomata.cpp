@@ -24,10 +24,14 @@ CellularAutomata::~CellularAutomata() {
 }
 
 
-void CellularAutomata::init(){
+void CellularAutomata::init(int rule){
     shaderProgram.loadShaders("src/shaders/texture.vert", "src/shaders/texture.frag");
     initQuadGeometry();
     initTexture();
+
+    RuleToBinary(rule, binary);
+    for (int i = 0; i < 512; i++)
+        cout << binary[i] << " ";
     
     int numBytes = SIZE*SIZE*sizeof(bool);
     
@@ -35,9 +39,11 @@ void CellularAutomata::init(){
     h_input = (bool*) malloc(numBytes);
     h_output = (bool*) malloc(numBytes);
     
+    
     //device memory
     cudaMalloc((void**)&d_input, numBytes); 
     cudaMalloc((void**)&d_output, numBytes); 
+    cudaMalloc((void**)&d_rule, 512*sizeof(bool));
     
     initState();
     simulation_step = 0;
@@ -45,7 +51,7 @@ void CellularAutomata::init(){
 
 //TODO: Adapt cuda code for CellularAutomata
 void CellularAutomata::update() {
-    string mode = "CUDA";
+    string mode = "CPU";
     
     if (mode == "CUDA") 
     {
@@ -62,12 +68,10 @@ void CellularAutomata::update() {
     }
     else if (mode == "CPU")
     {
-        if (simulation_step % 2) {
-            bool* aux = h_input;
-            h_input = h_output;
-            h_output = aux;
-        }
-        updateCellularState(h_input, h_output);
+        bool* aux = h_input;
+        h_input = h_output;
+        h_output = aux;
+        updateCellularState(h_input, h_output, binary);
     }
     else
     {
@@ -120,19 +124,65 @@ void CellularAutomata::draw(glm::mat4& modelview, glm::mat4& projection) {
 
 // PRIVATE METHODS -----------------------------------------------------------------------
 
-void CellularAutomata::initState(){
-    for (int i = 0; i < SIZE*SIZE; i++){
-        h_input[i] = (rand() % 100) < 50;
-    }
-      cudaMemcpy(d_input, h_input, SIZE*SIZE*sizeof(bool), cudaMemcpyHostToDevice);
+
+void CellularAutomata::RuleToBinary(int rule, bool (&binary)[512])    
+{
+    //in a 2D image, the neighbourhood has 9 cells
+    for(int i = 0; i < 512; i++)    
+    {    
+        binary[i] = rule%2;    
+        rule = rule/2;  
+    }  
 }
 
 
-void CellularAutomata::updateCellularState(bool* input, bool* output){
-    for (int i = 0; i < SIZE*SIZE; i++)
-    {
-        output[i] = !input[i];
+void CellularAutomata::initState(){
+    for (int i = 0; i < SIZE*SIZE; i++){
+        //h_input[i] = (rand() % 100) < 50;
+        h_input[i] = false;
+        h_output[i] = false;
     }
+    h_input[SIZE*SIZE/2+ SIZE/2] = true;
+
+    h_output[SIZE*SIZE/2+ SIZE/2] = true;
+    cudaMemcpy(d_input, h_input, SIZE*SIZE*sizeof(bool), cudaMemcpyHostToDevice);
+}
+
+int toInt(bool b) {
+    int a = 0;
+    if (b) a = 1;
+    return a;
+}
+
+
+void CellularAutomata::updateCellularState(bool* input, bool* output, bool* binary){
+
+    int width = SIZE;
+    int height = SIZE;
+
+    for (int x = 0; x < width; x++){
+        for (int y = 0; y < height; y++){
+            if (x > 0 && y > 0 && x < width -1 && y < height -1){
+                int pos1 = toInt(input[(x-1)*width + (y+1)]); 
+                int pos2 = toInt(input[(x)*width + (y+1)]); 
+                int pos3 = toInt(input[(x+1)*width + (y+1)]); 
+                int pos4 = toInt(input[(x-1)*width + (y)]);
+                int pos5 = toInt(input[(x)*width + (y)]);
+                int pos6 = toInt(input[(x+1)*width + (y)]);
+                int pos7 = toInt(input[(x-1)*width + (y-1)]);
+                int pos8 = toInt(input[(x)*width + (y-1)]);
+                int pos9 = toInt(input[(x+1)*width + (y-1)]);
+                int index = pos1 + 2*pos2 + 4*pos3 + 8*pos4 + 16*pos5 + 32*pos6 + 64*pos7 + 128*pos8 + 256*pos9;
+                //cout << pos1 << " " << pos2 << " "<< pos3 << " "<< pos4 << " "<< pos5 << " "<< pos6 << " "<< pos7 << " "<< pos8 << " "<< endl;
+                //cout << index << endl;
+                output[x*width+y] = binary[index];
+                
+                //if (output[x*width+y]) cout << "!" << x << " " << y  << " " << binary[index] << endl;
+            }
+            
+        }
+    }
+    
 }
 
 

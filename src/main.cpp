@@ -6,7 +6,7 @@
 
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 800
-#define TIME_BETWEEN_SIMULATION_STEPS 200
+#define TIME_BETWEEN_SIMULATION_STEPS 100
 CellularAutomata cellularAutomata;
 
 int elapsedTime = 0;
@@ -22,6 +22,9 @@ void idleCallback();
 
 int main(int argc, char **argv)
 {
+    int rule = 0;
+    cin >> rule;
+    
     // init window
     glutInit(&argc,argv);
     glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH);
@@ -36,7 +39,7 @@ int main(int argc, char **argv)
 
     // needed to use 'gl' calls
     glewInit();
-    cellularAutomata.init();
+    cellularAutomata.init(rule);
     
     glutMainLoop();
     

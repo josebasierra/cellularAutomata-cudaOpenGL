@@ -3,6 +3,19 @@
 
 using namespace std;
 
+
+void RuleToBinary(int rule, bool (&binary)[9])    
+{
+    //in a 2D image, the neighbourhood has 9 cells
+    for(int i = 0; i < 9; i++)    
+    {    
+        binary[i] = rule%2;    
+        rule = rule/2;  
+        cout << i << " " << binary[i] << " " << rule << endl;
+    }  
+}
+
+
 int main(int argc, char **argv)
 {
     cout << argc << endl;
@@ -13,14 +26,8 @@ int main(int argc, char **argv)
     
     int rule = atoi(argv[1]);
     
-    int binary[9]; //in a 2D image, the neighbourhood has 9 cells
-
-    for(int i = 0; i < 9; i++)    
-    {    
-        binary[i] = rule%2;    
-        rule = rule/2;  
-        cout << i << " " << binary[i] << " " << rule << endl;
-    }    
+    bool binary[9];
+    RuleToBinary(rule, binary);
     
     cout<<"Binary of the given number = ";    
     for(int i = 8; i >= 0; i--)    
@@ -31,3 +38,5 @@ int main(int argc, char **argv)
     
     return 0;
 }
+
+
