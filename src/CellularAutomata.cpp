@@ -11,9 +11,8 @@ using namespace std;
 #define BUFFER_OFFSET(i) ((void*)(i))
 
 
-
-CellularAutomata::~CellularAutomata() {
-    
+CellularAutomata::~CellularAutomata() 
+{    
     free((void*)h_input);
     free((void*)h_output);
     cudaFree((void*)d_input);
@@ -24,60 +23,60 @@ CellularAutomata::~CellularAutomata() {
 }
 
 
-void CellularAutomata::init(int rule){
-    shaderProgram.loadShaders("src/shaders/texture.vert", "src/shaders/texture.frag");
-    initQuadGeometry();
-    initTexture();
-
-    RuleToBinary(rule, binary);
-    for (int i = 0; i < 512; i++)
-        cout << binary[i] << " ";
+void CellularAutomata::init(int rule, int grid_size, string execution_mode)
+{
+    RuleToBinary(rule, h_binary_rule);
+    this->grid_size = grid_size;
+    this->execution_mode = execution_mode;
     
-    int numBytes = SIZE*SIZE*sizeof(bool);
+    int numBytes = grid_size*grid_size*sizeof(bool);
     
     //host memory
     h_input = (bool*) malloc(numBytes);
     h_output = (bool*) malloc(numBytes);
     
-    
     //device memory
     cudaMalloc((void**)&d_input, numBytes); 
     cudaMalloc((void**)&d_output, numBytes); 
-    cudaMalloc((void**)&d_rule, 512*sizeof(bool));
+    cudaMalloc((void**)&d_binary_rule, RULE_SIZE*sizeof(bool));
     
     initState();
     simulation_step = 0;
+    
+    //init drawing
+    shaderProgram.loadShaders("src/shaders/texture.vert", "src/shaders/texture.frag");
+    initQuadGeometry();
+    initTexture();
 }
 
-//TODO: Adapt cuda code for CellularAutomata
-void CellularAutomata::update() {
-    string mode = "CPU";
-    
-    if (mode == "CUDA") 
+
+void CellularAutomata::update() 
+{    
+    if (execution_mode == "cuda") 
     {
+        cuda_updateCellularState(d_input, d_output, grid_size);
+        
         // change input/output
-        if (simulation_step % 2) {
-            bool* aux = d_input;
-            d_input = d_output;
-            d_output = aux;
-        }
-        cuda_updateCellularState(d_input, d_output, SIZE);
+        bool* aux = d_input;
+        d_input = d_output;
+        d_output = aux;
         
         //get data from gpu to cpu to update texture
-        cudaMemcpy(h_output, d_output, SIZE*SIZE*sizeof(bool), cudaMemcpyDeviceToHost); 
+        cudaMemcpy(h_output, d_output, grid_size*grid_size*sizeof(bool), cudaMemcpyDeviceToHost); 
     }
-    else if (mode == "CPU")
+    else if (execution_mode == "cpu")
     {
+        updateCellularState(h_input, h_output, h_binary_rule);
+        
+        // change input/output
         bool* aux = h_input;
         h_input = h_output;
         h_output = aux;
-        updateCellularState(h_input, h_output, binary);
     }
-    else
-    {
-        cout << "fuck off" << endl;
-    }
+
     simulation_step++;
+
+    //TODO: cuda - opengl interop
     
     // update of VBO inside CUDA ------------------------------------------------------------
     
@@ -97,8 +96,8 @@ void CellularAutomata::update() {
 }
 
 
-void CellularAutomata::draw(glm::mat4& modelview, glm::mat4& projection) {
-    
+void CellularAutomata::draw(glm::mat4& modelview, glm::mat4& projection) 
+{    
     updateTexture();
     
     // activate program and pass uniforms to shaders
@@ -122,13 +121,14 @@ void CellularAutomata::draw(glm::mat4& modelview, glm::mat4& projection) {
     glDisable(GL_TEXTURE_2D);
 }
 
+
 // PRIVATE METHODS -----------------------------------------------------------------------
 
 
-void CellularAutomata::RuleToBinary(int rule, bool (&binary)[512])    
+void CellularAutomata::RuleToBinary(int rule, bool *binary)    
 {
     //in a 2D image, the neighbourhood has 9 cells
-    for(int i = 0; i < 512; i++)    
+    for(int i = 0; i < RULE_SIZE; i++)    
     {    
         binary[i] = rule%2;    
         rule = rule/2;  
@@ -136,69 +136,64 @@ void CellularAutomata::RuleToBinary(int rule, bool (&binary)[512])
 }
 
 
-void CellularAutomata::initState(){
-    for (int i = 0; i < SIZE*SIZE; i++){
-        //h_input[i] = (rand() % 100) < 50;
-        h_input[i] = false;
-        h_output[i] = false;
+void CellularAutomata::initState()
+{
+    for (int i = 0; i < grid_size*grid_size; i++)
+    {
+        h_input[i] = (rand() % 100) < 50;
     }
-    h_input[SIZE*SIZE/2+ SIZE/2] = true;
-
-    h_output[SIZE*SIZE/2+ SIZE/2] = true;
-    cudaMemcpy(d_input, h_input, SIZE*SIZE*sizeof(bool), cudaMemcpyHostToDevice);
-}
-
-int toInt(bool b) {
-    int a = 0;
-    if (b) a = 1;
-    return a;
+    cudaMemcpy(d_input, h_input, grid_size*grid_size*sizeof(bool), cudaMemcpyHostToDevice);
 }
 
 
-void CellularAutomata::updateCellularState(bool* input, bool* output, bool* binary){
+void CellularAutomata::updateCellularState(bool* input, bool* output, bool* binary)
+{
+    int width = grid_size;
+    int height = grid_size;
 
-    int width = SIZE;
-    int height = SIZE;
+    for (int x = 0; x < width; x++) 
+    {
+        for (int y = 0; y < height; y++) 
+        {
+            int xRight = (x + 1 + width) % width;
+            int xLeft = (x - 1 + width) % width ;
+            int yTop = (y + 1 + height) % height; 
+            int yBottom = (y - 1 + height) % height;
 
-    for (int x = 0; x < width; x++){
-        for (int y = 0; y < height; y++){
-            if (x > 0 && y > 0 && x < width -1 && y < height -1){
-                int pos1 = toInt(input[(x-1)*width + (y+1)]); 
-                int pos2 = toInt(input[(x)*width + (y+1)]); 
-                int pos3 = toInt(input[(x+1)*width + (y+1)]); 
-                int pos4 = toInt(input[(x-1)*width + (y)]);
-                int pos5 = toInt(input[(x)*width + (y)]);
-                int pos6 = toInt(input[(x+1)*width + (y)]);
-                int pos7 = toInt(input[(x-1)*width + (y-1)]);
-                int pos8 = toInt(input[(x)*width + (y-1)]);
-                int pos9 = toInt(input[(x+1)*width + (y-1)]);
-                int index = pos1 + 2*pos2 + 4*pos3 + 8*pos4 + 16*pos5 + 32*pos6 + 64*pos7 + 128*pos8 + 256*pos9;
-                //cout << pos1 << " " << pos2 << " "<< pos3 << " "<< pos4 << " "<< pos5 << " "<< pos6 << " "<< pos7 << " "<< pos8 << " "<< endl;
-                //cout << index << endl;
-                output[x*width+y] = binary[index];
-                
-                //if (output[x*width+y]) cout << "!" << x << " " << y  << " " << binary[index] << endl;
-            }
+            bool neigh0 = input[xLeft*height + yTop]; 
+            bool neigh1 = input[x*height + yTop]; 
+            bool neigh2 = input[xRight*height + yTop]; 
+            bool neigh3 = input[xLeft*height + y];
+            bool neigh4 = input[xRight*height + y];
+            bool neigh5 = input[xLeft*height + yBottom];
+            bool neigh6 = input[x*height + yBottom];
+            bool neigh7 = input[xRight*height + yBottom];
+            int living_neighbors = neigh0 + neigh1 + neigh2 + neigh3 + neigh4 + neigh5 + neigh6 + neigh7;
+
+            int cell = input[x*height + y];
+            int index = cell ? 9 + living_neighbors : living_neighbors;
             
+            output[x*height+y] = binary[index];
         }
     }
-    
 }
 
 
-void CellularAutomata::updateTexture(){
-    rgba texture_data[SIZE*SIZE];
+void CellularAutomata::updateTexture()
+{
+    rgba texture_data[grid_size*grid_size];
     
-    for (int i = 0; i < SIZE*SIZE; i++){
+    for (int i = 0; i < grid_size*grid_size; i++)
+    {
         texture_data[i] = h_output[i] ? LIFE_COLOR : DEATH_COLOR;
     }
     
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SIZE, SIZE, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, grid_size, grid_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
 }
 
 
-void CellularAutomata::initQuadGeometry() {
-    
+void CellularAutomata::initQuadGeometry() 
+{    
     // create VAO and VBO
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
@@ -239,24 +234,27 @@ void CellularAutomata::initQuadGeometry() {
 }
 
 
-void CellularAutomata::initTexture(){
+void CellularAutomata::initTexture()
+{
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
 
-    int width = SIZE;
-    int height = SIZE;
+    int width = grid_size;
+    int height = grid_size;
     
     rgba texture_data[width*height];
     for (int i = 0; i < width*height; i++){
         texture_data[i] = DEATH_COLOR;
     }
-        
+    
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
     glGenerateMipmap(GL_TEXTURE_2D);
 }
 
 
-void CellularAutomata::freeQuadGeometry(){
+void CellularAutomata::freeQuadGeometry()
+{
     // remove CUDA register of the VBO
     //cudaGraphicsUnregisterResource(cuda_vbo_resource);
     
@@ -267,6 +265,7 @@ void CellularAutomata::freeQuadGeometry(){
 }
 
 
-void CellularAutomata::freeTexture(){
+void CellularAutomata::freeTexture()
+{
     //free texture memory...
 }
