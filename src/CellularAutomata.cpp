@@ -38,7 +38,10 @@ void CellularAutomata::init(int rule, int grid_size, string execution_mode)
     //device memory
     cudaMalloc((void**)&d_input, numBytes); 
     cudaMalloc((void**)&d_output, numBytes); 
+    
     cudaMalloc((void**)&d_binary_rule, RULE_SIZE*sizeof(bool));
+    cudaMemcpy(d_binary_rule, h_binary_rule, RULE_SIZE*sizeof(bool), cudaMemcpyHostToDevice);
+
     
     initState();
     simulation_step = 0;
@@ -54,24 +57,24 @@ void CellularAutomata::update()
 {    
     if (execution_mode == "cuda") 
     {
-        cuda_updateCellularState(d_input, d_output, grid_size);
-        
-        // change input/output
-        bool* aux = d_input;
-        d_input = d_output;
-        d_output = aux;
-        
-        //get data from gpu to cpu to update texture
-        cudaMemcpy(h_output, d_output, grid_size*grid_size*sizeof(bool), cudaMemcpyDeviceToHost); 
+        if(simulation_step != 0)
+        {
+            bool* aux = d_input;
+            d_input = d_output;
+            d_output = aux;
+        }
+        cuda_updateCellularState(d_input, d_output, d_binary_rule, grid_size);
+
     }
     else if (execution_mode == "cpu")
-    {
+    {    
+        if(simulation_step != 0) 
+        {
+            bool* aux = h_input;
+            h_input = h_output;
+            h_output = aux;
+        }
         updateCellularState(h_input, h_output, h_binary_rule);
-        
-        // change input/output
-        bool* aux = h_input;
-        h_input = h_output;
-        h_output = aux;
     }
 
     simulation_step++;
@@ -181,14 +184,19 @@ void CellularAutomata::updateCellularState(bool* input, bool* output, bool* bina
 
 void CellularAutomata::updateTexture()
 {
-    rgba texture_data[grid_size*grid_size];
+    //get data from gpu to cpu to update texture
+    if (execution_mode == "cuda") 
+    {
+        cudaMemcpy(h_output, d_output, grid_size*grid_size*sizeof(bool), cudaMemcpyDeviceToHost); 
+    }
     
+    rgba *texture_data = new rgba[grid_size*grid_size];
     for (int i = 0; i < grid_size*grid_size; i++)
     {
         texture_data[i] = h_output[i] ? LIFE_COLOR : DEATH_COLOR;
     }
-    
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, grid_size, grid_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
+    delete(texture_data);
 }
 
 
@@ -203,16 +211,16 @@ void CellularAutomata::initQuadGeometry()
     //TODO: change hardcoded positions
     //define quad vertices to display texture 
     Vertex v_left_up, v_left_down, v_right_up, v_right_down;
-    v_left_up.position = {100,700};
+    v_left_up.position = {-1,1};
     v_left_up.texCoord = {0,1};
     
-    v_left_down.position = {100,100};
+    v_left_down.position = {-1,-1};
     v_left_down.texCoord = {0,0};
     
-    v_right_up.position = {700, 700};
+    v_right_up.position = {1, 1};
     v_right_up.texCoord = {1,1};
     
-    v_right_down.position = {700,100};
+    v_right_down.position = {1,-1};
     v_right_down.texCoord = {1.0};
     
     Vertex quad_vertices[6] = {
@@ -242,7 +250,7 @@ void CellularAutomata::initTexture()
     int width = grid_size;
     int height = grid_size;
     
-    rgba texture_data[width*height];
+    rgba *texture_data = new rgba[width*height];
     for (int i = 0; i < width*height; i++){
         texture_data[i] = DEATH_COLOR;
     }
@@ -250,6 +258,8 @@ void CellularAutomata::initTexture()
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
     glGenerateMipmap(GL_TEXTURE_2D);
+    
+    delete(texture_data);
 }
 
 

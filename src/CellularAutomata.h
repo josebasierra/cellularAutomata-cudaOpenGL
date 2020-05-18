@@ -12,7 +12,7 @@ using namespace std;
 
 
 const int RULE_SIZE = 18;
-const rgba DEATH_COLOR = {50, 50, 50, 255};
+const rgba DEATH_COLOR = {40, 40, 40, 255};
 const rgba LIFE_COLOR = {255, 255, 255, 255};
 
 class CellularAutomata {
@@ -25,8 +25,8 @@ public:
     void draw(glm::mat4& modelview, glm::mat4& projection);
 
 private:
-
     void RuleToBinary(int rule, bool *binary_rule);   
+    
     void initState();
     void initQuadGeometry();
     void initTexture();

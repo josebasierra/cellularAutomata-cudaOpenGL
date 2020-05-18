@@ -4,21 +4,24 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 
-#define SCREEN_WIDTH 800
-#define SCREEN_HEIGHT 800
+#define SCREEN_WIDTH 900
+#define SCREEN_HEIGHT 900
 #define TIME_BETWEEN_SIMULATION_STEPS 50
 
 CellularAutomata cellularAutomata;
+glm::mat4 projection;
 
 int elapsedTime = 0;
 int timeSinceLastStep = 0;
-float frames = 0;
-float timeFrames = 0;
 
+int deltaTime = 0;
+int drawTime = 0;
+int updateTime = 0;
 
 void cleanup();
 void drawCallback();
 void idleCallback();
+void reshapeCallback(int width, int height);
 
 
 int main(int argc, char **argv)
@@ -33,10 +36,14 @@ int main(int argc, char **argv)
     // glut callable functions
     glutDisplayFunc(drawCallback);
     glutIdleFunc(idleCallback);
+    glutReshapeFunc(reshapeCallback);
     glutCloseFunc(cleanup);
 
     // needed to use 'gl' calls
     glewInit();
+    
+    //init camera
+    projection = glm::ortho(-1.f, 1.f, -1.f , 1.f);
     
     //init cellularAutomata
     int rule = 6152;
@@ -55,23 +62,11 @@ int main(int argc, char **argv)
 } 
 
 
-void updateAvgFps(int deltaTime) 
+void updateTitle() 
 {
-    frames++;
-    timeFrames+=deltaTime;
-    
-    // update fps display every second
-    if (timeFrames >= 1000) {
-        
-        float avgfps = frames/(timeFrames/1000.0f);
-        
-        char title[256];
-        sprintf(title, "CUDA Particle Simulation: %3.1f fps", avgfps);
-        glutSetWindowTitle(title);
-        
-        frames = 0;
-        timeFrames = 0;
-    }
+    char title[256];
+    sprintf(title, "Update: %i ms | Draw: %i ms | Total step time: %i ms", updateTime, drawTime, updateTime + drawTime);
+    glutSetWindowTitle(title);
 }
 
 
@@ -83,34 +78,45 @@ void cleanup()
 
 void drawCallback()
 {    
+    int startTime = glutGet(GLUT_ELAPSED_TIME);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
     glm::mat4 modelview = glm::mat4(1.0f);
-    glm::mat4 projection = glm::ortho(0.0f, float(SCREEN_WIDTH), 0.0f , float(SCREEN_HEIGHT));
     
     cellularAutomata.draw(modelview, projection);
  
+    updateTitle();
     glutSwapBuffers();
+    
+    int endTime = glutGet(GLUT_ELAPSED_TIME);
+    
+    drawTime = endTime - startTime;
 }
 
 
 void idleCallback()
 {
-    // time shit...
     int newElapsedTime = glutGet(GLUT_ELAPSED_TIME);
-	int deltaTime = newElapsedTime - elapsedTime;
+	deltaTime = newElapsedTime - elapsedTime;
     elapsedTime = newElapsedTime;
     
-    updateAvgFps(deltaTime);
-    
-    // update logic...
     if (elapsedTime - timeSinceLastStep >= TIME_BETWEEN_SIMULATION_STEPS){
         timeSinceLastStep = elapsedTime;
         
+        int startTime = glutGet(GLUT_ELAPSED_TIME);
         cellularAutomata.update();
-            
+        int endTime = glutGet(GLUT_ELAPSED_TIME);
+        
+        updateTime = endTime - startTime;
         glutPostRedisplay();
     }
+}
+
+//TODO: resize window correctly
+void reshapeCallback(int width, int height){
+    float ratio = width/(float)height;
+    //projection = glm::ortho(-1.f, 1.f, -1.f*ratio , 1.f*ratio);
+    cout << width << " " << height << endl;
 }
 
 
