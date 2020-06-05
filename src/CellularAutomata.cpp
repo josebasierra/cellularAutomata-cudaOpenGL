@@ -9,7 +9,7 @@
 using namespace std;
 
 #define BUFFER_OFFSET(i) ((void*)(i))
-
+#define MAX_STEPS 10000000
 
 CellularAutomata::~CellularAutomata() 
 {    
@@ -55,6 +55,8 @@ void CellularAutomata::init(int rule, int grid_size, string execution_mode)
 
 void CellularAutomata::update() 
 {    
+    //if (simulation_step > MAX_STEPS) return;
+
     if (execution_mode == "cuda") 
     {
         if(simulation_step != 0)
