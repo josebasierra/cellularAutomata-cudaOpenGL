@@ -4,19 +4,22 @@
 #include <GL/glew.h>
 #include <GL/gl.h>
 #include <glm/gtc/matrix_transform.hpp>
+#include <cuda_runtime.h>
 
 #include <iostream>
 using namespace std;
 
 #define BUFFER_OFFSET(i) ((void*)(i))
-#define MAX_STEPS 10000000
+#define MAX_STEPS 100
 
 CellularAutomata::~CellularAutomata() 
 {    
     free((void*)h_input);
     free((void*)h_output);
+    
     cudaFree((void*)d_input);
     cudaFree((void*)d_output);
+    cudaFree((void*)d_binary_rule);
     
     freeQuadGeometry();
     freeTexture();
@@ -57,7 +60,7 @@ void CellularAutomata::update()
 {    
     //if (simulation_step > MAX_STEPS) return;
 
-    if (execution_mode == "cuda") 
+    if (execution_mode == "cuda" || execution_mode == "fullcuda") 
     {
         if(simulation_step != 0)
         {
@@ -66,7 +69,6 @@ void CellularAutomata::update()
             d_output = aux;
         }
         cuda_updateCellularState(d_input, d_output, d_binary_rule, grid_size);
-
     }
     else if (execution_mode == "cpu")
     {    
@@ -80,24 +82,6 @@ void CellularAutomata::update()
     }
 
     simulation_step++;
-
-    //TODO: cuda - opengl interop
-    
-    // update of VBO inside CUDA ------------------------------------------------------------
-    
-    // map vbo to be used by CUDA
-    //Vertex *dptr;
-    //cudaGraphicsMapResources(1, &cuda_vbo_resource, 0);
-    //size_t num_bytes;
-    //cudaGraphicsResourceGetMappedPointer((void **)&dptr, &num_bytes,cuda_vbo_resource);
-    
-    // run kernel to update vertices of the VBO
-    //run_updateVertices(dptr, d_particles, NUM_PARTICLES);
-    
-    // unmap vbo
-    //cudaGraphicsUnmapResources(1, &cuda_vbo_resource, 0);
-    
-    // --------------------------------------------------------------------------------------
 }
 
 
@@ -112,7 +96,7 @@ void CellularAutomata::draw(glm::mat4& modelview, glm::mat4& projection)
     shaderProgram.setUniform4f("color", 1.0f, 0.0f, 0.0f, 1.0f);
     
     // bind
-    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, texture);
 	glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     
@@ -122,13 +106,12 @@ void CellularAutomata::draw(glm::mat4& modelview, glm::mat4& projection)
     
     // unbind
     glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glDisable(GL_TEXTURE_2D);
 }
 
 
 // PRIVATE METHODS -----------------------------------------------------------------------
-
 
 void CellularAutomata::RuleToBinary(int rule, bool *binary)    
 {
@@ -186,19 +169,48 @@ void CellularAutomata::updateCellularState(bool* input, bool* output, bool* bina
 
 void CellularAutomata::updateTexture()
 {
-    //get data from gpu to cpu to update texture
-    if (execution_mode == "cuda") 
+    if (execution_mode == "fullcuda") 
     {
-        cudaMemcpy(h_output, d_output, grid_size*grid_size*sizeof(bool), cudaMemcpyDeviceToHost); 
+        cudaGraphicsMapResources(1, &texResource);
+        
+        cudaArray_t texArray;
+        cudaGraphicsSubResourceGetMappedArray(&texArray, texResource, 0, 0);
+        cudaResourceDesc resourceDesc;
+        {
+            resourceDesc.resType = cudaResourceTypeArray;
+            resourceDesc.res.array.array = texArray;
+        }
+        
+        //surface creation (write/read texture)
+        cudaSurfaceObject_t surfaceObject;
+        cudaCreateSurfaceObject(&surfaceObject, &resourceDesc);
+        
+        //kernel call
+        cuda_updateTexture(d_output, surfaceObject, grid_size);
+        
+        cudaDestroySurfaceObject(surfaceObject);
+        
+        cudaGraphicsUnmapResources(1, &texResource);
+        //----------------------------------------------------------------
     }
-    
-    rgba *texture_data = new rgba[grid_size*grid_size];
-    for (int i = 0; i < grid_size*grid_size; i++)
+    else 
     {
-        texture_data[i] = h_output[i] ? LIFE_COLOR : DEATH_COLOR;
+        //get data from gpu to cpu to update texture
+        if (execution_mode == "cuda") 
+        {
+            cudaMemcpy(h_output, d_output, grid_size*grid_size*sizeof(bool), cudaMemcpyDeviceToHost); 
+        }
+        
+        rgba *texture_data = new rgba[grid_size*grid_size];
+        for (int i = 0; i < grid_size*grid_size; i++)
+        {
+            texture_data[i] = h_output[i] ? LIFE_COLOR : DEATH_COLOR;
+        }
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, grid_size, grid_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        delete(texture_data);
     }
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, grid_size, grid_size, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
-    delete(texture_data);
 }
 
 
@@ -237,15 +249,12 @@ void CellularAutomata::initQuadGeometry()
     // unbind
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-    
-    //register VBO with CUDA
-    //unsigned int vbo_res_flags = cudaGraphicsMapFlagsWriteDiscard;
-    //cudaGraphicsGLRegisterBuffer(&cuda_vbo_resource, vbo, vbo_res_flags);
 }
 
 
 void CellularAutomata::initTexture()
 {
+    glEnable(GL_TEXTURE_2D);
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
 
@@ -260,8 +269,14 @@ void CellularAutomata::initTexture()
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
     glGenerateMipmap(GL_TEXTURE_2D);
-    
+    glBindTexture(GL_TEXTURE_2D, 0);
     delete(texture_data);
+    
+    //texture cuda resource
+    if (execution_mode == "fullcuda")
+    {
+        cudaGraphicsGLRegisterImage(&texResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
+    }
 }
 
 

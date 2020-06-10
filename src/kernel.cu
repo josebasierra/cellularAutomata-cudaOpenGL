@@ -1,10 +1,13 @@
 #include "kernel.cuh"
 #include <stdio.h>
 #include <math.h>
+#include <cuda_gl_interop.h>
+#include <cuda_runtime.h>
+
 
 #define SIZE 32
 
-__global__ void updateCellularState0(bool* input, bool* output, bool* binary_rule, int grid_size)
+__global__ void updateCellularState_0(bool* input, bool* output, bool* binary_rule, int grid_size)
 {
     int x = blockIdx.x*blockDim.x + threadIdx.x;
     int y = blockIdx.y*blockDim.y + threadIdx.y;
@@ -36,7 +39,7 @@ __global__ void updateCellularState0(bool* input, bool* output, bool* binary_rul
     }
 }
 
-__global__ void updateCellularState(bool* input, bool* output, bool* binary_rule, int grid_size)
+__global__ void updateCellularState_1(bool* input, bool* output, bool* binary_rule, int grid_size)
 {
     __shared__ bool s_input[SIZE][SIZE];
     
@@ -72,7 +75,7 @@ __global__ void updateCellularState(bool* input, bool* output, bool* binary_rule
             bool neigh7 = input[xRight*height + yBottom];
             int living_neighbors = neigh0 + neigh1 + neigh2 + neigh3 + neigh4 + neigh5 + neigh6 + neigh7;
 
-            int cell = s_input[threadIdx.x][threadIdx.y];
+            int cell = s_input[tx][ty];
             int index = cell ? 9 + living_neighbors : living_neighbors;
 
             output[x*height+y] = binary_rule[index];
@@ -109,7 +112,37 @@ void cuda_updateCellularState(bool* input, bool* output, bool* binary_rule, int 
 {
     dim3 block(SIZE, SIZE, 1);
     dim3 grid((grid_size + block.x - 1)/block.x, (grid_size + block.y - 1)/block.y, 1);
-    updateCellularState0<<<grid, block>>>(input, output, binary_rule, grid_size);
+    
+    updateCellularState_0<<<grid, block>>>(input, output, binary_rule, grid_size);
+    cudaDeviceSynchronize();
+    
+    updateCellularState_1<<<grid, block>>>(input, output, binary_rule, grid_size);
+    cudaDeviceSynchronize();
+}
+
+
+__global__ void updateTexture(bool* state, cudaSurfaceObject_t surface, int grid_size)
+{
+    int x = blockIdx.x*blockDim.x + threadIdx.x;
+    int y = blockIdx.y*blockDim.y + threadIdx.y;
+    
+    int width = grid_size;
+    int height = grid_size;
+
+    if (x < width && y < height)
+    {   
+        uchar4 data = state[x*height + y] ? make_uchar4(255,255,255,255) : make_uchar4(40,40,40,255);
+        surf2Dwrite(data, surface, x * sizeof(uchar4), y);
+    }
+}
+
+void cuda_updateTexture(bool* state, cudaSurfaceObject_t surface, int grid_size) 
+{
+    dim3 block(SIZE, SIZE, 1);
+    dim3 grid((grid_size + block.x - 1)/block.x, (grid_size + block.y - 1)/block.y, 1);
+    
+    updateTexture<<<grid,block>>>(state, surface, grid_size);
+    cudaDeviceSynchronize();
 }
 
 

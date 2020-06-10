@@ -4,7 +4,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
 
-using namespace std::chrono;
 
 #define SCREEN_WIDTH 900
 #define SCREEN_HEIGHT 900
@@ -67,7 +66,7 @@ int main(int argc, char **argv)
 void updateTitle() 
 {
     char title[256];
-    sprintf(title, "Update: %i ms | Draw: %i ms | Total step time: %i ms", updateTime, drawTime, updateTime + drawTime);
+    sprintf(title, "Update: %.3f ms | Draw: %.3f ms | Total step time: %.3f ms", updateTime/1000.f, drawTime/1000.f, (updateTime + drawTime)/1000.f);
     glutSetWindowTitle(title);
 }
 
@@ -80,20 +79,18 @@ void cleanup()
 
 void drawCallback()
 {    
-    int startTime = glutGet(GLUT_ELAPSED_TIME);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    auto start = chrono::steady_clock::now();
     
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glm::mat4 modelview = glm::mat4(1.0f);
     
-    //cellularAutomata.draw(modelview, projection);
+    cellularAutomata.draw(modelview, projection);
  
     updateTitle();
     glutSwapBuffers();
     
-    int endTime = glutGet(GLUT_ELAPSED_TIME);
-
-    drawTime = endTime - startTime;
-    cout << drawTime << endl;
+    auto end = chrono::steady_clock::now();
+    drawTime = chrono::duration_cast<chrono::microseconds>(end - start).count();
 }
 
 
@@ -106,15 +103,11 @@ void idleCallback()
     if (elapsedTime - timeSinceLastStep >= TIME_BETWEEN_SIMULATION_STEPS){
         timeSinceLastStep = elapsedTime;
         
-
         auto start = chrono::steady_clock::now();
-        int startTime = glutGet(GLUT_ELAPSED_TIME);
         cellularAutomata.update();
-        int endTime = glutGet(GLUT_ELAPSED_TIME);
         auto end = chrono::steady_clock::now();
-        
-        updateTime = duration_cast<chrono::microseconds>(end - start).count();
-        cout << updateTime << endl;
+        updateTime = chrono::duration_cast<chrono::microseconds>(end - start).count();
+
         glutPostRedisplay();
     }
 }

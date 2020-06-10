@@ -1,7 +1,6 @@
 #ifndef STRUCT_DEFS_H_
 #define STRUCT_DEFS_H_
 
-
 struct vec2 {
     float x, y;
 };

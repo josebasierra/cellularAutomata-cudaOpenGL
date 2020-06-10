@@ -39,6 +39,7 @@ private:
     
 private:
     int grid_size;
+    uint simulation_step;
     string execution_mode;
     
     //host data
@@ -48,15 +49,14 @@ private:
     //device data
     bool *d_input, *d_output, *d_binary_rule;
     
-    uint simulation_step;
-
-
+    //render data
     GLuint vao,vbo;
-    struct cudaGraphicsResource *cuda_vbo_resource;
-
     GLint posLocation, texLocation;
     GLuint texture;
     ShaderProgram shaderProgram;
+    
+    //interop cuda-opengl
+    cudaGraphicsResource_t texResource;
 }; 
 
 #endif 
