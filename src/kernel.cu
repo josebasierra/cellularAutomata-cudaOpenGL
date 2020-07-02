@@ -40,6 +40,7 @@ __global__ void updateCellularState_0(bool* input, bool* output, bool* binary_ru
     }
 }
 
+
 __global__ void updateCellularState_1(bool* input, bool* output, bool* binary_rule, int grid_size)
 {
     __shared__ bool s_input[SIZE][SIZE];
